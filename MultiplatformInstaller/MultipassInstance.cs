@@ -18,7 +18,7 @@ namespace microk8sWinInstaller
         public MultipassInstanceStatus MultipassInstanceStatus { get; set; }
         public string IPv4 { get; set; }
 
-        public Dictionary<int, MultipassInstanceCommand> InstanceCommands = new Dictionary<int, MultipassInstanceCommand>();
+        public Dictionary<int, MultipassInstanceCommand> InstanceCommands = new ();
 
         public MultipassInstance(string name, string status, string ipv4) : this(name, (MultipassInstanceStatus)Enum.Parse(typeof(MultipassInstanceStatus), status), ipv4)
         {

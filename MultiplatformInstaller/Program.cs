@@ -1,15 +1,11 @@
-﻿using microk8sWinInstaller;
-using Octokit;
-using ShellProgressBar;
+﻿using Konsole;
+using microk8sWinInstaller;
+using MultiplatformInstaller.Installers;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
-using System.Management.Automation;
-using System.Net;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.ServiceProcess;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -19,13 +15,6 @@ namespace MultiplatformInstaller
 {
     class Program
     {
-        /*TODO*/
-        //delete all
-        //stop all
-        //generate batches
-        /*-------------------*/
-
-
         public enum ProgramState
         {
             Main,
@@ -33,11 +22,20 @@ namespace MultiplatformInstaller
             Exit
         }
 
+        private static string initialMessage = "";
         static ProgramState programState = ProgramState.Main;
         static MultipassInstance selectedInstance = null;
+        static ProgressBar progressBar = null;
 
         static void Main(string[] args)
         {
+            if(args.Length > 0 && args[0] == "--debug")
+            {
+                Console.WriteLine("Waiting for debugger...");
+                SpinWait.SpinUntil(() => System.Diagnostics.Debugger.IsAttached);
+                Console.WriteLine("Debugger attached");
+            }
+            
             while (true)
             {
                 switch (programState)
@@ -113,6 +111,7 @@ namespace MultiplatformInstaller
                 if (instanceCount++ == 0) return;
 
                 var matches = Regex.Matches(line, @"(.+?)\s+");
+                if (matches.Count() < 3) return;
                 var name = matches[0].Groups[1]?.Value;
                 var status = matches[1].Groups[1]?.Value;
                 var ipv4 = matches[2].Groups[1]?.Value;
@@ -227,46 +226,56 @@ namespace MultiplatformInstaller
 
         public static MultipassInstance CreateNewInstance(bool openShellOnComplete = false)
         {
-            var startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-            var startupShortcutPath = Path.Combine(startupFolder, "microk8sWinInstaller.lnk");
-            var executablePath = Assembly.GetEntryAssembly().Location;
 
+            var currentOs = OperatingSystem.CurrentOS();
+            IInstaller installer;
 
-            Console.WriteLine("Searching latest multipass release...");
-
-            var gitClient = new GitHubClient(new ProductHeaderValue("MultipassInstaller"));
-            var releases = gitClient.Repository.Release.GetAll("CanonicalLtd", "multipass").GetAwaiter().GetResult();
-            var latestRelease = releases.Where(r => r.Assets.Any(a => a.ContentType == "application/x-msdos-program")).OrderByDescending(r => r.PublishedAt).FirstOrDefault();
-
-            if (latestRelease == null)
+            if (OperatingSystem.IsWindows())
+            {
+                installer = new WindowsInstaller();
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                throw new NotImplementedException();
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                throw new NotImplementedException();
+            }
+            else
             {
                 return null;
             }
 
-            var asset = latestRelease.Assets.First(a => a.ContentType == "application/x-msdos-program");
-
-            var assetUrl = asset.BrowserDownloadUrl;
-
-            if (!Directory.Exists(@"C:\Program Files\Multipass"))
+            if (!installer.IsInstalled)
             {
-                DownloadInstaller(assetUrl, Path.Combine(Path.GetDirectoryName(executablePath), asset.Name));
-                CreateShortcut(startupShortcutPath, executablePath);
-                DeployApplication(Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly().Location), asset.Name));
+                Console.WriteLine("Searching for the latest multipass release...");
+                InitializeProgressBar("Downloading installer...");
+                var installerPath = installer.Download(UpdateProgressBar);
+                installer.Install(installerPath);
             }
-
-            if (File.Exists(startupShortcutPath))
+            else
             {
-                File.Delete(startupShortcutPath);
+                installer.ClearInstallationFiles();
             }
 
             var cloudConfigPath = Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly().Location), "cloud-config.yaml");
 
             var launchCommand = $"launch --cloud-init \"{cloudConfigPath}\"";
+            InitializeProgressBar("Downloading image...");
+            ExecMultipassCommand(launchCommand, line =>
+            {
+                var progressMatch = Regex.Match(line, @"([0-9]+)\s*%");
+                if(progressMatch.Success && Int32.TryParse(progressMatch.Groups[1].Value, out var progress))
+                {
+                    UpdateProgressBar(progress, "");
+                }
+            });
 
             string vmName = "";
             string status = "";
             string ipv4 = "";
-            ExecMultipassCommand(launchCommand, line =>
+            ExecMultipassCommand("list", line =>
             {
                 var matches = Regex.Matches(line, @"(.+?)\s+");
                 if (matches.Count < 3)
@@ -286,154 +295,21 @@ namespace MultiplatformInstaller
             return new MultipassInstance(vmName, MultipassInstanceStatus.Running, ipv4);
         }
 
-        public static void DownloadInstaller(string uri, string targetName)
+        private static void UpdateProgressBar(int v, string message)
         {
-            if (File.Exists(targetName))
+            if (progressBar == null)
+            {
                 return;
+            }
 
-            var mre = new ManualResetEvent(false);
+            progressBar.Refresh(v, message);
+        }
 
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(uri);
-            request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
-
-            IAsyncResult asyncResult = null;
-
+        private static void InitializeProgressBar(string progressName)
+        {
             const int totalTicks = 100;
-            var options = new ProgressBarOptions
-            {
-                ForegroundColor = ConsoleColor.Yellow,
-                ForegroundColorDone = ConsoleColor.DarkGreen,
-                BackgroundColor = ConsoleColor.DarkGray,
-                BackgroundCharacter = '\u2593'
-            };
-
-            var pbar = new ProgressBar(totalTicks, $"Downloading {targetName}", options);
-
-            asyncResult = request.BeginGetResponse((state) =>
-            {
-                var response = request.EndGetResponse(asyncResult) as HttpWebResponse;
-                var length = response.ContentLength;
-
-                var responseStream = response.GetResponseStream();
-                var file = GetContentWithProgressReporting(responseStream, length, pbar);
-
-                File.WriteAllBytes(targetName, file);
-
-                mre.Set();
-            }, null);
-
-            mre.WaitOne();
-
-            pbar.Dispose();
-        }
-
-        private static string initialMessage = "";
-        private static void UpdateProgressBar(int v, ProgressBar pb, string message)
-        {
-            if (pb == null)
-            {
-                return;
-            }
-
-            if (v == 0 && string.IsNullOrWhiteSpace(initialMessage))
-            {
-                initialMessage = pb.Message;
-            }
-
-            pb.Tick(v, $"{initialMessage} {message}");
-        }
-
-        private static byte[] GetContentWithProgressReporting(Stream responseStream, long contentLength, ProgressBar pb)
-        {
-            UpdateProgressBar(0, pb, $"0/{contentLength / (1024f * 1024f):0.##} MB");
-
-            // Allocate space for the content
-            var data = new byte[contentLength];
-            int currentIndex = 0;
-            int bytesReceived = 0;
-            var buffer = new byte[256];
-            do
-            {
-                bytesReceived = responseStream.Read(buffer, 0, 256);
-                Array.Copy(buffer, 0, data, currentIndex, bytesReceived);
-                currentIndex += bytesReceived;
-
-                // Report percentage
-                double percentage = (double)currentIndex / contentLength;
-                UpdateProgressBar((int)(percentage * 100), pb, $"{currentIndex / (1024f * 1024f):0.##}/{contentLength / (1024f * 1024f):0.##} MB");
-            } while (currentIndex < contentLength);
-
-            UpdateProgressBar(100, pb, $"{contentLength / (1024f * 1024f):0.##}/{contentLength / (1024f * 1024f):0.##} MB");
-            return data;
-        }
-
-        public static void CreateShortcut(string shortcutPath, string targetPath)
-        {
-            Type t = Type.GetTypeFromCLSID(new Guid("72C24DD5-D70A-438B-8A42-98424B88AFB8")); //Windows Script Host Shell Object
-            dynamic shell = Activator.CreateInstance(t);
-            try
-            {
-                var lnk = shell.CreateShortcut(shortcutPath);
-                try
-                {
-                    lnk.TargetPath = targetPath;
-                    lnk.IconLocation = "shell32.dll, 1";
-                    lnk.Save();
-                }
-                finally
-                {
-                    Marshal.FinalReleaseComObject(lnk);
-                }
-            }
-            finally
-            {
-                Marshal.FinalReleaseComObject(shell);
-            }
-        }
-
-        public static void DeployApplication(string executableFilePath)
-        {
-            PowerShell powerShell = null;
-            Console.WriteLine(" ");
-            Console.WriteLine("Deploying application...");
-            try
-            {
-                using (powerShell = PowerShell.Create())
-                {
-                    powerShell.AddScript($"$setup=Start-Process '{executableFilePath}' -ArgumentList '/S' -Wait -PassThru");
-
-                    Collection<PSObject> PSOutput = powerShell.Invoke();
-                    foreach (PSObject outputItem in PSOutput)
-                    {
-                        if (outputItem != null)
-                        {
-
-                            Console.WriteLine(outputItem.BaseObject.GetType().FullName);
-                            Console.WriteLine(outputItem.BaseObject.ToString() + "\n");
-                        }
-                    }
-
-                    if (powerShell.Streams.Error.Count > 0)
-                    {
-                        string temp = powerShell.Streams.Error.First().ToString();
-                        Console.WriteLine("Error: {0}", temp);
-
-                    }
-                    else
-                    {
-                        Console.WriteLine("Installation has completed successfully.");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error occured: {0}", ex.InnerException);
-            }
-            finally
-            {
-                if (powerShell != null)
-                    powerShell.Dispose();
-            }
+            
+            progressBar = new ProgressBar(totalTicks);
         }
     }
 }

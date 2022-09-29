@@ -13,7 +13,7 @@ namespace microk8sWinInstaller
     {
         public static void ExecMultipassCommand(string command, Action<string> outputCallback = null, bool redirectOutput = true)
         {
-            Process p = new Process();
+            Process p = new ();
 
             ProcessStartInfo startinfo = new ProcessStartInfo(@"multipass")
             {
