@@ -20,7 +20,7 @@ namespace MultiplatformInstaller.Installers
         {
             var startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
             _startupShortcutPath = Path.Combine(startupFolder, "microk8sWinInstaller.lnk");
-            _executablePath = Assembly.GetEntryAssembly().Location;
+            _executablePath = Environment.GetCommandLineArgs()[0];
         }
 
         public bool IsInstalled => Directory.Exists(@"C:\Program Files\Multipass");
@@ -150,11 +150,6 @@ namespace MultiplatformInstaller.Installers
             {
                 Console.WriteLine("Error occured: {0}", ex.InnerException);
             }
-            finally
-            {
-                //if (powerShell != null)
-                //    powerShell.Dispose();
-            }
         }
 
 
@@ -205,7 +200,7 @@ namespace MultiplatformInstaller.Installers
 
         private static byte[] GetContentWithProgressReporting(Stream responseStream, long contentLength, Action<int, string> setProgress)
         {
-            setProgress?.Invoke(0, "Downloading multipass");//$"0/{contentLength / (1024f * 1024f):0.##} MB");
+            setProgress?.Invoke(0, "Downloading multipass");
 
             // Allocate space for the content
             var data = new byte[contentLength];
@@ -220,10 +215,10 @@ namespace MultiplatformInstaller.Installers
                 // Report percentage
                 double percentage = (double)currentIndex / contentLength;
 
-                setProgress?.Invoke((int)(percentage * 100), "Downloading multipass");//, $"{currentIndex / (1024f * 1024f):0.##}/{contentLength / (1024f * 1024f):0.##} MB");
+                setProgress?.Invoke((int)(percentage * 100), "Downloading multipass");
             } while (currentIndex < contentLength);
 
-            setProgress?.Invoke(100, "Downloading multipass");//$"{contentLength / (1024f * 1024f):0.##}/{contentLength / (1024f * 1024f):0.##} MB");
+            setProgress?.Invoke(100, "Downloading multipass");
             return data;
         }
     }
