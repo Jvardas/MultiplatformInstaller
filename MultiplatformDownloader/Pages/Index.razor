@@ -1,4 +1,6 @@
 ﻿@page "/"
+@using Octokit
+@inject IJSRuntime JS
 
 <PageTitle>Index</PageTitle>
 
@@ -11,16 +13,16 @@
 <div class="text-center">
     <div class="container-new px-3">
         <p>
-            Welcome to masters thesis titled 
+            Welcome to masters thesis titled
             <h3>"Building a multi-platform automation tool for Canonical's Multipass".</h3>
-            You can find the already existant work <a href="https://github.com/Jvardas/microk8s-windows-hub">here</a>
+            You can find the already existent work <a href="https://github.com/Jvardas/microk8s-windows-hub">here</a>
         </p>
         <div class="pb-6">
             <div class="text-center container-new d-md-flex mb-md-4 mt-md-4">
                 <div class="col-md-4 py-3 py-md-0 px-5">
                     <h5 class="h5 my-2 text-black">Windows</h5>
                     <p>
-                        <a class="btn btn-lg" style="background-image:linear-gradient(to bottom, #8241f9, #4e277b); border-color:#150a27; color:#fff" href="">Download for windows</a>
+                        <button class="btn btn-lg" style="background-image:linear-gradient(to bottom, #8241f9, #4e277b); border-color:#150a27; color:#fff" @onclick="GetLatestRelease">Download for windows</button>
                     </p>
                 </div>
                 <div class="col-md-4 py-3 py-md-0 px-5">
@@ -40,5 +42,22 @@
     </div>
 </div>
 
+@code {
+    private async Task GetLatestRelease()
+    {
+        var gitClient = new GitHubClient(new ProductHeaderValue("MultiplatformInstaller"));
+        var releases = await gitClient.Repository.Release.GetAll("Jvardas", "MultiplatformInstaller");
+        var latestRelease = releases.Where(r => r.Assets.Any(a => a.ContentType.Contains("application/x-msdownload"))).OrderByDescending(r => r.PublishedAt).FirstOrDefault();
 
-<SurveyPrompt Title="How is Blazor working for you?" />
+        if (latestRelease == null)
+        {
+            throw new Exception("Couldn't find latest multipass releases");
+        }
+
+        var asset = latestRelease.Assets.First(a => a.ContentType.Contains("application/x-msdownload"));
+
+        var assetUrl = asset.BrowserDownloadUrl;
+
+        await JS.InvokeVoidAsync("triggerFileDownload", asset.Name, assetUrl);
+    }
+}
