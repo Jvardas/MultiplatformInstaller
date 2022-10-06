@@ -136,7 +136,7 @@ namespace MultiplatformInstaller.Installers
 
                 var p = Process.Start(psi);
                 p.OutputDataReceived += (s, e) => { Console.WriteLine(e.Data); };
-                p.ErrorDataReceived += (s,e) => { Console.Error.WriteLine(e.Data); };
+                p.ErrorDataReceived += (s, e) => { Console.Error.WriteLine(e.Data); };
 
 
                 p.WaitForExit();
