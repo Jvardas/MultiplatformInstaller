@@ -10,6 +10,7 @@ namespace MultiplatformInstaller.Installers
     internal interface IInstaller
     {
         bool IsInstalled { get; }
+        bool IsDownloadRequired { get; }
 
         /// <summary>
         /// Download the latest multipass release from GitHub

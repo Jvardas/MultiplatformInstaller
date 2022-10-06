@@ -24,6 +24,7 @@ namespace MultiplatformInstaller.Installers
         }
 
         public bool IsInstalled => Directory.Exists(@"C:\Program Files\Multipass");
+        public bool IsDownloadRequired => true;
 
         public string Download(Action<int, string> reportProgressCallback = null)
         {

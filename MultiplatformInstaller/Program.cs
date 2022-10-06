@@ -246,7 +246,7 @@ namespace MultiplatformInstaller
             }
             else if (OperatingSystem.IsLinux())
             {
-                throw new NotImplementedException();
+                installer = new LinuxInstaller();
             }
             else
             {
@@ -255,10 +255,14 @@ namespace MultiplatformInstaller
 
             if (!installer.IsInstalled)
             {
-                Console.WriteLine("Searching for the latest multipass release...");
-                InitializeProgressBar("Downloading installer...");
-                var installerPath = installer.Download(UpdateProgressBar);
-                Console.CursorVisible = true;
+                var installerPath = "";
+                if (installer.IsDownloadRequired)
+                {
+                    Console.WriteLine("Searching for the latest multipass release...");
+                    InitializeProgressBar("Downloading installer...");
+                    installerPath = installer.Download(UpdateProgressBar);
+                    Console.CursorVisible = true;
+                }
                 installer.Install(installerPath);
             }
             else
@@ -273,10 +277,10 @@ namespace MultiplatformInstaller
                 var progressMatch = Regex.Match(line, @"([0-9]+)\s*%");
                 if (progressMatch.Success && Int32.TryParse(progressMatch.Groups[1].Value, out var progress))
                 {
-                    UpdateProgressBar(progress, "");
+                    UpdateProgressBar(progress, "Downloading image...");
                 }
-                Console.CursorVisible = true;
             });
+            Console.CursorVisible = true;
 
             string vmName = "";
             string status = "";
