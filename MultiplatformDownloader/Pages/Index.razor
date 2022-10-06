@@ -6,7 +6,7 @@
 
 <header>
     <div class="container-new px-3 text-center">
-        <h1>Here you can download Mikrok8s for all major OSs</h1>
+        <h1>Download Multipass for all major OSs bundled in a single executable!</h1>
     </div>
 </header>
 
@@ -14,27 +14,27 @@
     <div class="container-new px-3">
         <p>
             Welcome to masters thesis titled
-            <h3>"Building a multi-platform automation tool for Canonical's Multipass".</h3>
-            You can find the already existent work <a href="https://github.com/Jvardas/microk8s-windows-hub">here</a>
+            <h3>Building a multi-platform automation tool for Canonical's Multipass (MATM)</h3>
+            You can find the work that sparked the idea <a href="https://github.com/Jvardas/microk8s-windows-hub">here</a>
         </p>
         <div class="pb-6">
             <div class="text-center container-new d-md-flex mb-md-4 mt-md-4">
                 <div class="col-md-4 py-3 py-md-0 px-5">
                     <h5 class="h5 my-2 text-black">Windows</h5>
                     <p>
-                        <button class="btn btn-lg" style="background-image:linear-gradient(to bottom, #8241f9, #4e277b); border-color:#150a27; color:#fff" @onclick="GetLatestRelease">Download for windows</button>
+                        <button class="btn btn-lg" style="background-image:linear-gradient(to bottom, #8241f9, #4e277b); border-color:#150a27; color:#fff" @onclick='() => GetLatestRelease("application/x-msdownload")'>Download for windows</button>
                     </p>
                 </div>
                 <div class="col-md-4 py-3 py-md-0 px-5">
-                    <h5 class="h5 my-2 text-black">Mac-OS</h5>
+                    <h5 class="h5 my-2 text-black" style="text-decoration:line-through">Mac-OS</h5>
                     <p>
-                        <a class="mx-1 btn btn-lg" style="background-image:linear-gradient(to bottom, #8241f9, #4e277b); border-color:#150a27; color:#fff" href="">Download for mac-os</a>
+                        <a class="mx-1 btn btn-lg disabled" style="background-image:linear-gradient(to bottom, #8241f9, #4e277b); border-color:#150a27; color:#fff" href="">Download for mac-os</a>
                     </p>
                 </div>
                 <div class="col-md-4 py-3 py-md-0 px-5">
-                    <h5 class="h5 my-2 text-black">Linux</h5>
+                    <h5 class="h5 my-2 text-black" style="text-decoration:line-through">Linux</h5>
                     <p>
-                        <a class="mx-1 btn btn-lg" style="background-image:linear-gradient(to bottom, #8241f9, #4e277b); border-color:#150a27; color:#fff" href="">Download for linux</a>
+                        <a class="mx-1 btn btn-lg disabled" style="background-image:linear-gradient(to bottom, #8241f9, #4e277b); border-color:#150a27; color:#fff" href="">Download for linux</a>
                     </p>
                 </div>
             </div>
@@ -43,18 +43,18 @@
 </div>
 
 @code {
-    private async Task GetLatestRelease()
+    private async Task GetLatestRelease(string contentType)
     {
         var gitClient = new GitHubClient(new ProductHeaderValue("MultiplatformInstaller"));
         var releases = await gitClient.Repository.Release.GetAll("Jvardas", "MultiplatformInstaller");
-        var latestRelease = releases.Where(r => r.Assets.Any(a => a.ContentType.Contains("application/x-msdownload"))).OrderByDescending(r => r.PublishedAt).FirstOrDefault();
+        var latestRelease = releases.Where(r => r.Assets.Any(a => a.ContentType.Contains(contentType))).OrderByDescending(r => r.PublishedAt).FirstOrDefault();
 
         if (latestRelease == null)
         {
             throw new Exception("Couldn't find latest multipass releases");
         }
 
-        var asset = latestRelease.Assets.First(a => a.ContentType.Contains("application/x-msdownload"));
+        var asset = latestRelease.Assets.First(a => a.ContentType.Contains(contentType));
 
         var assetUrl = asset.BrowserDownloadUrl;
 
