@@ -1,4 +1,5 @@
-﻿using System;
+﻿using MultiplatformInstaller;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -115,7 +116,7 @@ namespace microk8sWinInstaller
                     .WithNamingConvention(new CamelCaseNamingConvention())
                     .WithNamingConvention(new HyphenatedNamingConvention())
                     .Build();
-                var config = deserializer.Deserialize<Config>(File.ReadAllText("config.yaml"));
+                var config = deserializer.Deserialize<Config>(File.ReadAllText(Program.configPath));
                 var snapCommmands = config.Snaps.SelectMany(s => s.Commands);
                 foreach (var snapCommand in snapCommmands)
                 {

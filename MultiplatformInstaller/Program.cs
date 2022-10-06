@@ -22,6 +22,9 @@ namespace MultiplatformInstaller
             Exit
         }
 
+        public readonly static string cloudConfigPath = Path.Combine(Path.GetDirectoryName(Environment.GetCommandLineArgs()[0]), "cloud-config.yaml");
+        public readonly static string configPath = Path.Combine(Path.GetDirectoryName(Environment.GetCommandLineArgs()[0]), "config.yaml");
+
         private static string initialMessage = "";
         static ProgramState programState = ProgramState.Main;
         static MultipassInstance selectedInstance = null;
@@ -29,13 +32,16 @@ namespace MultiplatformInstaller
 
         static void Main(string[] args)
         {
-            if(args.Length > 0 && args[0] == "--debug")
+            if (args.Length > 0 && args[0] == "--debug")
             {
                 Console.WriteLine("Waiting for debugger...");
                 SpinWait.SpinUntil(() => System.Diagnostics.Debugger.IsAttached);
                 Console.WriteLine("Debugger attached");
             }
-            
+
+            InitializeConfigFile(cloudConfigPath);
+            InitializeConfigFile(configPath);
+
             while (true)
             {
                 switch (programState)
@@ -252,6 +258,7 @@ namespace MultiplatformInstaller
                 Console.WriteLine("Searching for the latest multipass release...");
                 InitializeProgressBar("Downloading installer...");
                 var installerPath = installer.Download(UpdateProgressBar);
+                Console.CursorVisible = true;
                 installer.Install(installerPath);
             }
             else
@@ -259,17 +266,16 @@ namespace MultiplatformInstaller
                 installer.ClearInstallationFiles();
             }
 
-            var cloudConfigPath = Path.Combine(Path.GetDirectoryName(Assembly.GetEntryAssembly().Location), "cloud-config.yaml");
-
             var launchCommand = $"launch --cloud-init \"{cloudConfigPath}\"";
             InitializeProgressBar("Downloading image...");
             ExecMultipassCommand(launchCommand, line =>
             {
                 var progressMatch = Regex.Match(line, @"([0-9]+)\s*%");
-                if(progressMatch.Success && Int32.TryParse(progressMatch.Groups[1].Value, out var progress))
+                if (progressMatch.Success && Int32.TryParse(progressMatch.Groups[1].Value, out var progress))
                 {
                     UpdateProgressBar(progress, "");
                 }
+                Console.CursorVisible = true;
             });
 
             string vmName = "";
@@ -308,8 +314,51 @@ namespace MultiplatformInstaller
         private static void InitializeProgressBar(string progressName)
         {
             const int totalTicks = 100;
-            
+
             progressBar = new ProgressBar(totalTicks);
+            Console.CursorVisible = false;
+        }
+
+        private static void InitializeConfigFile(string cfgFileName)
+        {
+            var fi = new FileInfo(cfgFileName);
+            while (!fi.Exists)
+            {
+                Console.WriteLine($"{fi.Name} not found!");
+                Console.Write("Continue with [D]efault/[C]reate your own/[E]dit default:");
+                var option = Console.ReadKey();
+                Console.WriteLine();
+
+                switch (option.Key)
+                {
+                    case ConsoleKey.C:
+                        Console.WriteLine($"Press any key when {fi.Name} is ready...");
+                        Console.ReadKey();
+                        break;
+                    case ConsoleKey.E:
+                        Console.WriteLine($"Press any key when {fi.Name} is ready...");
+                        WriteResourceToFile($"MultiplatformInstaller.{fi.Name}", cfgFileName);
+                        Console.ReadKey();
+                        break;
+                    case ConsoleKey.D:
+                        WriteResourceToFile($"MultiplatformInstaller.{fi.Name}", cfgFileName);
+                        break;
+                    default:
+                        break;
+                }
+                fi = new FileInfo(cfgFileName);
+            }
+        }
+
+        private static void WriteResourceToFile(string resourceName, string fileName)
+        {
+            using (var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName))
+            {
+                using (var file = new FileStream(fileName, FileMode.Create, FileAccess.Write))
+                {
+                    resource.CopyTo(file);
+                }
+            }
         }
     }
 }
